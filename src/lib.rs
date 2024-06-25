@@ -249,21 +249,22 @@ impl Account {
         })
     }
 
-    /// Create a new account on the `server_url` with the information in [`NewAccount`]
+    /// Create a new account on the server specified in the directory at `directory_url` with the
+    /// information in [`NewAccount`]
     ///
-    /// The returned [`AccountCredentials`] can be serialized and stored for later use.
-    /// Use [`Account::from_credentials()`] to restore the account from the credentials.
+    /// The returned [`AccountCredentials`] can be serialized and stored for later use. Use
+    /// [`Account::from_credentials()`] to restore the account from the credentials.
     #[cfg(feature = "hyper-rustls")]
     pub async fn create(
         account: &NewAccount<'_>,
-        server_url: &str,
+        directory_url: &str,
         external_account: Option<&ExternalAccountKey>,
     ) -> Result<(Account, AccountCredentials), Error> {
         Self::create_inner(
             account,
             external_account,
-            Client::new(server_url, Box::<DefaultClient>::default()).await?,
-            server_url,
+            Client::new(directory_url, Box::<DefaultClient>::default()).await?,
+            directory_url,
         )
         .await
     }
@@ -274,15 +275,15 @@ impl Account {
     /// Use [`Account::from_credentials()`] to restore the account from the credentials.
     pub async fn create_with_http(
         account: &NewAccount<'_>,
-        server_url: &str,
+        directory_url: &str,
         external_account: Option<&ExternalAccountKey>,
         http: Box<dyn HttpClient>,
     ) -> Result<(Account, AccountCredentials), Error> {
         Self::create_inner(
             account,
             external_account,
-            Client::new(server_url, http).await?,
-            server_url,
+            Client::new(directory_url, http).await?,
+            directory_url,
         )
         .await
     }
@@ -291,7 +292,7 @@ impl Account {
         account: &NewAccount<'_>,
         external_account: Option<&ExternalAccountKey>,
         client: Client,
-        server_url: &str,
+        directory_url: &str,
     ) -> Result<(Account, AccountCredentials), Error> {
         let (key, key_pkcs8) = Key::generate()?;
         let payload = NewAccountPayload {
@@ -323,9 +324,9 @@ impl Account {
         let credentials = AccountCredentials {
             id: id.clone(),
             key_pkcs8: key_pkcs8.as_ref().to_vec(),
-            directory: Some(server_url.to_owned()),
+            directory: Some(directory_url.to_owned()),
             // We support deserializing URLs for compatibility with versions pre 0.4,
-            // but we prefer to get fresh URLs from the `server_url` for newer credentials.
+            // but we prefer to get fresh URLs from the `directory_url` for newer credentials.
             urls: None,
         };
 
@@ -403,7 +404,7 @@ impl AccountInner {
             id: credentials.id,
             key: Key::from_pkcs8_der(credentials.key_pkcs8.as_ref())?,
             client: match (credentials.directory, credentials.urls) {
-                (Some(server_url), _) => Client::new(&server_url, http).await?,
+                (Some(directory_url), _) => Client::new(&directory_url, http).await?,
                 (None, Some(urls)) => Client { http, urls },
                 (None, None) => return Err("no server URLs found".into()),
             },
@@ -454,9 +455,9 @@ struct Client {
 }
 
 impl Client {
-    async fn new(server_url: &str, http: Box<dyn HttpClient>) -> Result<Self, Error> {
+    async fn new(directory_url: &str, http: Box<dyn HttpClient>) -> Result<Self, Error> {
         let req = Request::builder()
-            .uri(server_url)
+            .uri(directory_url)
             .body(http_body_util::Full::default())
             .expect("Infallible error should not occur");
         let rsp = http.request(req).await?;
